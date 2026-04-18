@@ -1,4 +1,4 @@
-use crate::errors::{HttpError, ProxyError};
+use crate::error::{HttpError, ProxyError};
 use core::fmt;
 
 #[derive(Debug)]
@@ -8,7 +8,7 @@ pub struct HttpRequest {
     pub version: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub enum Method {
     GET,
     POST,

@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
 use crate::{
-    errors::ProxyError,
-    proxy::{request::HttpRequest, upstream::send_req},
+    error::ProxyError,
+    proxy::{request::HttpRequest, response::ProxyResponse, upstream::send_req},
 };
 use reqwest::Response;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
+use tracing::info;
 
+#[tracing::instrument(name = "Handling connection", skip_all)]
 pub async fn handle_conneection(
     stream: TcpStream,
     client: Arc<reqwest::Client>,
@@ -22,16 +24,13 @@ pub async fn handle_conneection(
     Ok(())
 }
 
+#[tracing::instrument(name = "Responding to user", skip_all)]
 pub async fn respond(mut stream: TcpStream, res: Response) -> Result<(), ProxyError> {
-    let mut headers = String::new();
-    headers.push_str(&format!("{:?} {}\r\n", res.version(), res.status()));
-    res.headers().iter().for_each(|(k, v)| {
-        headers.push_str(&format!("{}: {}\r\n", k, v.to_str().unwrap_or("")));
-    });
-    headers.push_str("\r\n");
     stream.writable().await?;
-    stream.write_all(&headers.as_bytes()).await?;
-    let body = res.bytes().await?;
-    stream.write_all(&body).await?;
+    let res = ProxyResponse::from_reqwest(res).await?;
+    stream.write_all(&res.get_status_line().as_bytes()).await?;
+    stream.write_all(&res.get_headers().as_bytes()).await?;
+    stream.write_all(&res.body).await?;
+    info!("Responded to user written {} bytes", res.body.len());
     Ok(())
 }

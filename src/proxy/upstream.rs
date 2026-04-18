@@ -1,6 +1,6 @@
 use reqwest::Response;
 
-use crate::{errors::ProxyError, proxy::request::HttpRequest};
+use crate::{error::ProxyError, proxy::request::HttpRequest};
 
 pub async fn send_req(
     req: &HttpRequest,
