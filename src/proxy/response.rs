@@ -1,23 +1,27 @@
+use bytes::{BufMut, Bytes, BytesMut};
 use reqwest::{Response, StatusCode, Version};
-use std::io::Write;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 use crate::{cache::policy::CacheMode, error::ProxyError};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProxyResponse {
     pub version: Version,
     pub status: StatusCode,
-    pub headers: Vec<u8>,
-    pub body: Vec<u8>,
+    pub headers: Bytes,
+    pub body_len: usize,
+    pub body: Bytes,
 }
 
 impl ProxyResponse {
-    pub fn new(res: &Response, body: Vec<u8>, headers: Vec<u8>) -> Self {
+    pub fn new(res: &Response, body: Bytes, headers: Bytes) -> Self {
+        let body_len = get_body_len(res).unwrap();
+
         Self {
             version: res.version(),
             status: res.status(),
             headers,
+            body_len,
             body,
         }
     }
@@ -33,7 +37,7 @@ pub async fn respond(
     stream.write_all(&headers).await?;
 
     let mut body_buf = if cache_mode == CacheMode::Cache {
-        Some(Vec::new())
+        Some(BytesMut::new())
     } else {
         None
     };
@@ -47,7 +51,7 @@ pub async fn respond(
     }
 
     if let Some(body) = body_buf {
-        let response = ProxyResponse::new(&res, body, headers);
+        let response = ProxyResponse::new(&res, body.freeze(), headers);
         return Ok(Some(response));
     }
 
@@ -61,20 +65,21 @@ pub fn get_body_len(res: &Response) -> Option<usize> {
         .and_then(|s| s.parse().ok())
 }
 
-fn get_headers(res: &Response) -> Result<Vec<u8>, ProxyError> {
-    let mut headers: Vec<u8> = Vec::with_capacity(512);
-    write!(&mut headers, "{:?} {}\r\n", res.version(), res.status())?;
+fn get_headers(res: &Response) -> Result<Bytes, ProxyError> {
+    let mut headers = BytesMut::with_capacity(1024);
 
-    res.headers().iter().try_for_each(|(k, v)| {
-        write!(
-            &mut headers,
-            "{}: {}\r\n",
-            k.as_str(),
-            v.to_str().unwrap_or("")
-        )
-    })?;
+    let status_line = format!("{:?}: {}\r\n", res.version(), res.status());
 
-    headers.extend_from_slice(b"\r\n");
+    headers.put(status_line.as_bytes());
 
-    Ok(headers)
+    let header_line = res
+        .headers()
+        .iter()
+        .map(|(k, v)| format!("{}: {}\r\n", k.as_str(), v.to_str().unwrap_or("")))
+        .chain(std::iter::once("\r\n".to_string()))
+        .collect::<String>();
+
+    headers.put(header_line.as_bytes());
+
+    Ok(headers.freeze())
 }

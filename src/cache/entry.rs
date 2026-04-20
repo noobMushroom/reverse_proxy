@@ -1,19 +1,20 @@
-use std::time::Instant;
-use crate::proxy::{request::{HttpRequest, Method}, response::ProxyResponse};
+use crate::proxy::{
+    request::{HttpRequest, Method},
+    response::ProxyResponse,
+};
+use std::time::{Duration, Instant};
 
 #[derive(PartialEq, Eq, Debug, Hash)]
 pub struct CacheKey {
-    pub method: Method
+    pub method: Method,
     pub path: String,
 }
 
-
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct CacheEntry {
-    response: ProxyResponse,
+    pub response: ProxyResponse,
     pub expires_at: Instant,
 }
-
 
 impl CacheKey {
     pub fn new(req: &HttpRequest) -> Self {
@@ -24,7 +25,11 @@ impl CacheKey {
     }
 }
 
-
-// impl CacheEntry {
-//    pub fn new(status: u16, ) 
-// }
+impl CacheEntry {
+    pub fn new(response: ProxyResponse, ttl: Duration) -> Self {
+        Self {
+            response,
+            expires_at: Instant::now() + ttl,
+        }
+    }
+}
