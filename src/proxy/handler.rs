@@ -37,12 +37,12 @@ pub async fn handle_conneection(
     let mut res = send_req(&http_request, &client, &config.target).await?;
 
     if should_cache(&res, config, &http_request) {
-        info!("streaming and caching");
+        info!(name: "streaming and caching", "Caching and Streaming Path: {}", http_request.path);
         let response = respond(stream, &mut res, CacheMode::Cache).await?.unwrap();
         let cache_val = CacheEntry::new(response, config.ttl);
         cache_store.insert(cache_key, cache_val, config.cache_size);
     } else {
-        info!("streaming");
+        info!(name: "streaming only", "Streaming Path {}", http_request.path);
         respond(stream, &mut res, CacheMode::NoCache).await?;
     }
 
