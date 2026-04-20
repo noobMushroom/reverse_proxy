@@ -1,11 +1,12 @@
 use reqwest::Response;
+use url::Url;
 
 use crate::{error::ProxyError, proxy::request::HttpRequest};
 
 pub async fn send_req(
     req: &HttpRequest,
     client: &reqwest::Client,
-    target: &str,
+    target: &Url,
 ) -> Result<Response, ProxyError> {
     let url = format!("{}{}", target, req.path);
     let req_type = client.request(reqwest::Method::try_from(&req.method)?, url);

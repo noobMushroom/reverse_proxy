@@ -8,7 +8,7 @@ pub struct HttpRequest {
     pub version: String,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub enum Method {
     GET,
     POST,
@@ -71,6 +71,8 @@ impl TryFrom<&str> for HttpRequest {
         if !version.starts_with("HTTP") {
             return Err(HttpError::BadRequest("Invalid Version".into()));
         }
+
+        let path = path.strip_prefix("/").unwrap_or(path);
 
         Ok(Self {
             method,

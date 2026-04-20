@@ -1,36 +1,35 @@
 use std::sync::Arc;
 
 use crate::{
-    error::ProxyError,
-    proxy::{request::HttpRequest, response::ProxyResponse, upstream::send_req},
+    cache::{entry::CacheKey, policy::{CacheMode, should_cache}, store::CacheStore}, config::Cli, error::ProxyError, proxy::{request::HttpRequest, response::respond, upstream::send_req}
 };
-use reqwest::Response;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
-use tracing::info;
 
 #[tracing::instrument(name = "Handling connection", skip_all)]
 pub async fn handle_conneection(
     stream: TcpStream,
     client: Arc<reqwest::Client>,
-    target: &str,
+    cache_store : Arc<CacheStore>,
+    config: &Cli,
 ) -> Result<(), ProxyError> {
     stream.readable().await?;
     let mut buffer = [0; 1024];
     let n = stream.try_read(&mut buffer)?;
     let request = String::from_utf8_lossy(&buffer[..n]);
     let http_request = HttpRequest::try_from(request.as_ref())?;
-    let res = send_req(&http_request, &client, &target).await?;
-    respond(stream, res).await?;
-    Ok(())
-}
+    let cache_key = CacheKey::new(&http_request);
 
-#[tracing::instrument(name = "Responding to user", skip_all)]
-pub async fn respond(mut stream: TcpStream, res: Response) -> Result<(), ProxyError> {
-    stream.writable().await?;
-    let res = ProxyResponse::from_reqwest(res).await?;
-    stream.write_all(&res.get_status_line().as_bytes()).await?;
-    stream.write_all(&res.get_headers().as_bytes()).await?;
-    stream.write_all(&res.body).await?;
-    info!("Responded to user written {} bytes", res.body.len());
+    if let Some(v) = cache_store.store.get(&cache_key) {
+    };
+
+    let mut res = send_req(&http_request, &client, &config.target).await?;
+
+    if should_cache(&res, config, &http_request) {
+        let _response = respond(stream, &mut res, CacheMode::Cache).await?;
+    }else {
+        respond(stream, &mut res, CacheMode::NoCache).await?;
+    }
+
+
     Ok(())
 }

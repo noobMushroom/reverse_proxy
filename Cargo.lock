@@ -1413,6 +1413,7 @@ name = "shiny_reverse_proxy"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "bytes",
  "chrono",
  "clap",
  "dashmap",
@@ -1423,6 +1424,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

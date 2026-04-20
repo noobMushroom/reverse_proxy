@@ -18,11 +18,8 @@ pub enum ProxyError {
     #[error("Http Error: {0}")]
     Http(#[from] HttpError),
 
-
     #[error("Upstream Error: {0}")]
-    UpstreamError(#[from] reqwest::Error)
-
-
+    UpstreamError(#[from] reqwest::Error),
 }
 
 #[derive(Debug, Error)]

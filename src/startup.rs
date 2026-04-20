@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::cache::store::CacheStore;
 use crate::proxy::handler::handle_conneection;
 use crate::{config::Cli, error::ProxyError};
 use tokio::net::TcpListener;
@@ -20,14 +21,16 @@ pub async fn run(config: Arc<Cli>) -> Result<(), ProxyError> {
     let listener = start_listener(config.port).await?;
     info!("Server starting at {:?}", listener.local_addr());
     let client = Arc::new(reqwest::Client::new());
+    let store = Arc::new(CacheStore::new());
     loop {
         let (socket, addr) = listener.accept().await?;
         let config = config.clone();
         let client = client.clone();
+        let store = store.clone();
         let span = info_span!("request", client_ip=%addr);
         tokio::spawn(
             async move {
-                if let Err(e) = handle_conneection(socket, client, &config.target).await {
+                if let Err(e) = handle_conneection(socket, client,store, &config).await {
                     tracing::error!(error = %e, "request failed");
                 }
             }

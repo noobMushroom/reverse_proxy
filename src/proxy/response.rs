@@ -1,44 +1,80 @@
 use reqwest::{Response, StatusCode, Version};
+use std::io::Write;
+use tokio::{io::AsyncWriteExt, net::TcpStream};
 
-use crate::error::ProxyError;
+use crate::{cache::policy::CacheMode, error::ProxyError};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ProxyResponse {
     pub version: Version,
     pub status: StatusCode,
-    pub headers: Vec<(String, String)>,
+    pub headers: Vec<u8>,
     pub body: Vec<u8>,
 }
 
 impl ProxyResponse {
-    pub async fn from_reqwest(response: Response) -> Result<Self, ProxyError> {
-        let headers = response
-            .headers()
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-            .collect::<Vec<(String, String)>>();
-        let version = response.version();
-        let status = response.status();
-
-        let body = response.bytes().await?;
-
-        Ok(Self {
-            version,
-            status,
+    pub fn new(res: &Response, body: Vec<u8>, headers: Vec<u8>) -> Self {
+        Self {
+            version: res.version(),
+            status: res.status(),
             headers,
-            body: body.to_vec(),
-        })
+            body,
+        }
+    }
+}
+
+#[tracing::instrument(name = "Responding to user", skip_all)]
+pub async fn respond(
+    mut stream: TcpStream,
+    res: &mut Response,
+    cache_mode: CacheMode,
+) -> Result<Option<ProxyResponse>, ProxyError> {
+    let headers = get_headers(&res)?;
+    stream.write_all(&headers).await?;
+
+    let mut body_buf = if cache_mode == CacheMode::Cache {
+        Some(Vec::new())
+    } else {
+        None
+    };
+
+    while let Some(chunk) = res.chunk().await? {
+        stream.write_all(&chunk).await?;
+
+        if let Some(buf) = body_buf.as_mut() {
+            buf.extend_from_slice(&chunk);
+        }
     }
 
-    pub fn get_status_line(&self) -> String {
-        format!("{:?} {}\r\n", self.version, self.status)
+    if let Some(body) = body_buf {
+        let response = ProxyResponse::new(&res, body, headers);
+        return Ok(Some(response));
     }
 
-    pub fn get_headers(&self) -> String {
-        self.headers
-            .iter()
-            .map(|(k, v)| format!("{}: {}\r\n", k, v))
-            .chain(std::iter::once("\r\n".to_string()))
-            .collect::<String>()
-    }
+    Ok(None)
+}
+
+pub fn get_body_len(res: &Response) -> Option<usize> {
+    res.headers()
+        .get("content-length")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse().ok())
+}
+
+fn get_headers(res: &Response) -> Result<Vec<u8>, ProxyError> {
+    let mut headers: Vec<u8> = Vec::with_capacity(512);
+    write!(&mut headers, "{:?} {}\r\n", res.version(), res.status())?;
+
+    res.headers().iter().try_for_each(|(k, v)| {
+        write!(
+            &mut headers,
+            "{}: {}\r\n",
+            k.as_str(),
+            v.to_str().unwrap_or("")
+        )
+    })?;
+
+    headers.extend_from_slice(b"\r\n");
+
+    Ok(headers)
 }
