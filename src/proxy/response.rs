@@ -68,7 +68,7 @@ pub fn get_body_len(res: &Response) -> Option<usize> {
 fn get_headers(res: &Response) -> Result<Bytes, ProxyError> {
     let mut headers = BytesMut::with_capacity(1024);
 
-    let status_line = format!("{:?}: {}\r\n", res.version(), res.status());
+    let status_line = format!("{:?} {}\r\n", res.version(), res.status());
 
     headers.put(status_line.as_bytes());
 

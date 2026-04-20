@@ -27,7 +27,7 @@ pub async fn handle_conneection(
     let http_request = HttpRequest::try_from(request.as_ref())?;
     let cache_key = CacheKey::new(&http_request);
 
-    if let Some(entry) = cache_store.store.get(&cache_key) {
+    if let Some(entry) = cache_store.get(&cache_key) {
         info!(name: "Cache-Hit", "Cache-Hit to path {}", http_request.path);
         stream.write_all(&entry.response.headers).await?;
         stream.write_all(&entry.response.body).await?;
