@@ -22,7 +22,7 @@ impl CacheStore {
     pub fn get(&self, key: &CacheKey) -> Option<CacheEntry> {
         if let Some(entry) = self.store.get(key) {
             let entry = entry.value();
-            if entry.expires_at < Instant::now() {
+            if entry.expires_at > Instant::now() {
                 return Some(entry.clone());
             } else {
                 self.store.remove(key);
