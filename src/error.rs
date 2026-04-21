@@ -20,6 +20,9 @@ pub enum ProxyError {
 
     #[error("Upstream Error: {0}")]
     UpstreamError(#[from] reqwest::Error),
+
+    #[error("Cache overflow: tried to store {size} bytes, limit is {max}")]
+    CacheOverflow { size: usize, max: usize },
 }
 
 #[derive(Debug, Error)]
