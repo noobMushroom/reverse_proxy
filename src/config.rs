@@ -40,7 +40,7 @@ fn parse_max_object_size(input: &str) -> Result<usize, String> {
     let mb: f64 = input.parse().map_err(|_| "Invalid number".to_string())?;
 
     if !(1.0 <= mb && mb <= 20.0) {
-        return Err("Max object size should be between 0 and 20 MB".into());
+        return Err("Max object size should be between 1 and 20 MB".into());
     }
 
     let bytes = mb * 1024.0 * 1024.0;
@@ -52,7 +52,7 @@ fn parse_cache_size(input: &str) -> Result<usize, String> {
     let mb: f64 = input.parse().map_err(|_| "Invalid number".to_string())?;
 
     if !(50.0 <= mb && mb <= 500.0) {
-        return Err("Max object size should be between 0 and 20 MB".into());
+        return Err("Max object size should be between 1 to 500 mb".into());
     }
 
     let bytes = mb * 1024.0 * 1024.0;
