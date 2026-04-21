@@ -29,7 +29,7 @@ impl ProxyResponse {
 
 #[tracing::instrument(name = "Responding to user", skip_all)]
 pub async fn respond(
-    mut stream: TcpStream,
+    stream:&mut TcpStream,
     res: &mut Response,
     cache_mode: CacheMode,
 ) -> Result<Option<ProxyResponse>, ProxyError> {
@@ -49,6 +49,8 @@ pub async fn respond(
             buf.extend_from_slice(&chunk);
         }
     }
+
+    stream.flush().await?;
 
     if let Some(body) = body_buf {
         let response = ProxyResponse::new(&res, body.freeze(), headers);
@@ -82,4 +84,11 @@ fn get_headers(res: &Response) -> Result<Bytes, ProxyError> {
     headers.put(header_line.as_bytes());
 
     Ok(headers.freeze())
+}
+
+pub async fn serve_cache(stream: &mut TcpStream, res: &ProxyResponse) -> Result<(), ProxyError> {
+    stream.write_all(&res.headers).await?;
+    stream.write_all(&res.body).await?;
+    stream.flush().await?;
+    Ok(())
 }

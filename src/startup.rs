@@ -19,7 +19,7 @@ pub async fn start_listener(port: usize) -> Result<TcpListener, ProxyError> {
 
 pub async fn run(config: Arc<Cli>) -> Result<(), ProxyError> {
     let listener = start_listener(config.port).await?;
-    info!("Server starting at {:?}", listener.local_addr());
+    info!("Server starting at {:?}, {}", listener.local_addr(), config.target);
     let client = Arc::new(reqwest::Client::new());
     let store = Arc::new(CacheStore::new());
     loop {

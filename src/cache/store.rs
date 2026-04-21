@@ -5,6 +5,7 @@ use std::{
 
 use crate::cache::entry::{CacheEntry, CacheKey};
 use dashmap::DashMap;
+use tracing::info;
 
 pub struct CacheStore {
     pub store: DashMap<CacheKey, CacheEntry>,
@@ -20,17 +21,19 @@ impl CacheStore {
     }
 
     pub fn get(&self, key: &CacheKey) -> Option<CacheEntry> {
-        if let Some(entry) = self.store.get(key) {
-            let entry = entry.value();
-            if entry.expires_at > Instant::now() {
-                return Some(entry.clone());
-            } else {
-                self.store.remove(key);
-                self.decrease_store_size(entry.response.body_len);
-            }
-        }
+        let entry = self.store.get(key)?.value().clone();
 
-        None
+        if entry.expires_at > Instant::now() {
+            Some(entry)
+        } else {
+            info!(event = "Removing Cache", path = %key.path);
+
+            self.store.remove(key);
+            self.decrease_store_size(entry.response.body_len);
+
+            info!(event = "Cache Removed", path = %key.path, store_size = %self.size.load(Ordering::Relaxed));
+            None
+        }
     }
 
     fn decrease_store_size(&self, val: usize) {
@@ -44,6 +47,7 @@ impl CacheStore {
     pub fn insert(&self, key: CacheKey, value: CacheEntry, cache_size: usize) {
         if self.size.load(Ordering::Relaxed) + value.response.body_len < cache_size {
             self.increase_store_size(value.response.body_len);
+            info!(event = "Cache Added", path = %key.path, store_size = %self.size.load(Ordering::Relaxed));
             self.store.insert(key, value);
         }
     }

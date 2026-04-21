@@ -8,9 +8,13 @@ use crate::{
     },
     config::Cli,
     error::ProxyError,
-    proxy::{request::HttpRequest, response::respond, upstream::send_req},
+    proxy::{
+        request::HttpRequest,
+        response::{respond, serve_cache},
+        upstream::send_req,
+    },
 };
-use tokio::{io::AsyncWriteExt, net::TcpStream};
+use tokio::net::TcpStream;
 use tracing::info;
 
 #[tracing::instrument(name = "Handling connection", skip_all)]
@@ -28,22 +32,31 @@ pub async fn handle_conneection(
     let cache_key = CacheKey::new(&http_request);
 
     if let Some(entry) = cache_store.get(&cache_key) {
-        info!(name: "Cache-Hit", "Cache-Hit to path {}", http_request.path);
-        stream.write_all(&entry.response.headers).await?;
-        stream.write_all(&entry.response.body).await?;
+        info!(event = "Cache-Hit", path = %http_request.path);
+        serve_cache(&mut stream, &entry.response).await?;
         return Ok(());
     }
 
     let mut res = send_req(&http_request, &client, &config.target).await?;
 
-    if should_cache(&res, config, &http_request) {
-        info!(name: "streaming and caching", "Caching and Streaming Path: {}", http_request.path);
-        let response = respond(stream, &mut res, CacheMode::Cache).await?.unwrap();
-        let cache_val = CacheEntry::new(response, config.ttl);
-        cache_store.insert(cache_key, cache_val, config.cache_size);
+    let mode = if should_cache(&res, config, &http_request) {
+        CacheMode::Cache
     } else {
-        info!(name: "streaming only", "Streaming Path {}", http_request.path);
-        respond(stream, &mut res, CacheMode::NoCache).await?;
+        CacheMode::NoCache
+    };
+
+    match mode {
+        CacheMode::Cache => {
+            info!(event = "Caching and Streaming", path = %http_request.path);
+            if let Some(response) = respond(&mut stream, &mut res, mode).await? {
+                let cache_val = CacheEntry::new(response, config.ttl);
+                cache_store.insert(cache_key, cache_val, config.cache_size);
+            }
+        }
+        CacheMode::NoCache => {
+            info!(event = "Streaming", path = %http_request.path);
+            respond(&mut stream, &mut res, mode).await?;
+        }
     }
 
     Ok(())
